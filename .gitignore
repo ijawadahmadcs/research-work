@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+venv/
+data/raw_videos/*
+data/mhi_images/*
+data/processed/*
+!data/raw_videos/**/.gitkeep
+!data/mhi_images/**/.gitkeep
+!data/processed/**/.gitkeep
+models/checkpoints/*
+outputs/logs/*
+*.keras

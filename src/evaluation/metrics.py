@@ -1,11 +1,3 @@
-"""
-metrics.py
-==========
-Computes accuracy, per-class and macro-averaged precision/recall/F1,
-matching the metrics reported in the base paper (Eqs. 2-5) so results
-are directly comparable.
-"""
-
 from typing import Dict
 
 import numpy as np
@@ -16,11 +8,6 @@ from sklearn.metrics import (
 
 
 def compute_metrics(y_true: np.ndarray, y_pred: np.ndarray, class_names) -> Dict:
-    """
-    y_true, y_pred: 1D arrays of integer class indices (not one-hot).
-    Returns a dict with overall accuracy plus macro and per-class
-    precision/recall/F1 -- mirroring TP/(TP+FP) etc. from the base paper.
-    """
     accuracy = accuracy_score(y_true, y_pred)
 
     precision_macro, recall_macro, f1_macro, _ = precision_recall_fscore_support(

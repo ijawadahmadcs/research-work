@@ -1,26 +1,3 @@
-"""
-trainer.py
-==========
-Two-stage transfer-learning training loop:
-
-  Stage 1 (feature extraction / warmup): backbone frozen, only the new
-  FC head trains, with a relatively large learning rate. This lets the
-  randomly-initialized head settle into a reasonable region without
-  corrupting the pretrained ImageNet weights via large, noisy gradients.
-
-  Stage 2 (fine-tuning): the top `fine_tune_at_layer` backbone layers are
-  unfrozen and the WHOLE thing trains together with a much smaller
-  learning rate, letting the backbone's high-level features adapt
-  specifically to MHI image statistics (which look nothing like natural
-  photos: mostly black background, a single bright blob-and-trail shape).
-
-This staged approach is standard practice for transfer learning on small
-datasets (see config.py comments) and avoids the common mistake of
-fine-tuning the whole network from epoch 1 with a large learning rate,
-which tends to destroy the pretrained weights before the new head has
-learned anything useful to backpropagate.
-"""
-
 from dataclasses import dataclass
 from typing import Optional
 

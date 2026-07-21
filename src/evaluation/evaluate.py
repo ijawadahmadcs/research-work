@@ -1,15 +1,3 @@
-"""
-evaluate.py
-===========
-CLI entry point for evaluating a trained model on the TEST split
-(never seen during training or hyperparameter selection):
-
-    python -m src.evaluation.evaluate --backbone mobilenet
-
-Reports accuracy/precision/recall/F1, confusion matrix, and ROC/AUC,
-and writes a predictions CSV for auditability.
-"""
-
 import argparse
 import os
 

@@ -1,11 +1,3 @@
-"""
-plots.py
-========
-Training/validation accuracy and loss curves across both training
-stages (frozen warmup + fine-tuning), stitched together into one
-continuous x-axis of epochs -- mirroring Figs. 5 & 6 of the base paper.
-"""
-
 import os
 from typing import Optional
 

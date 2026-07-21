@@ -49,7 +49,7 @@ def parse_class_and_severity(filepath: str) -> Tuple[str, str]:
     """
     Infer (class_name, severity) from a raw video's path, assuming the
     KOA/data_dir/KOA_EL|KOA_MD|KOA_SV convention shown in the base paper
-    (Early / Moderate / Severe). Healthy videos have no severity.
+    (Early / Moderate / Severe). NM videos have no severity.
     """
     parts = [p.upper() for p in filepath.replace("\\", "/").split("/")]
     if "KOA" in parts:
@@ -57,7 +57,7 @@ def parse_class_and_severity(filepath: str) -> Tuple[str, str]:
     elif "PD" in parts:
         cls = "PD"
     else:
-        cls = "Healthy"
+        cls = "NM"
 
     severity = "NA"
     for tag, name in (("_EL", "Early"), ("_MD", "Moderate"), ("_SV", "Severe")):

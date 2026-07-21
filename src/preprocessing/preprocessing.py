@@ -78,6 +78,8 @@ def generate_all_mhis(df: pd.DataFrame, cfg: Config = DEFAULT_CONFIG) -> pd.Data
                 row["video_path"], out_path,
                 tau=cfg.mhi_duration, threshold=cfg.binary_threshold,
                 decay=cfg.mhi_decay, resize_to=cfg.image_size,
+                min_threshold=cfg.mhi_min_threshold,
+                morph_open_kernel_size=cfg.mhi_morph_open_kernel,
             )
             mhi_paths.append(out_path)
         except (IOError, ValueError) as e:

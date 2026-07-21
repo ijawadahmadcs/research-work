@@ -1,13 +1,3 @@
-"""
-train.py
-========
-CLI entry point for training one backbone end-to-end:
-    python -m src.training.train --backbone mobilenet
-
-Loads the already-preprocessed train/validation MHI datasets, runs the
-two-stage Trainer, saves the final model, and plots training curves.
-"""
-
 import argparse
 import os
 

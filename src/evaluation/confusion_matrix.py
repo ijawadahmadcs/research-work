@@ -1,13 +1,3 @@
-"""
-confusion_matrix.py
-====================
-Computes and plots the confusion matrix -- essential for a 3-class
-medical problem because overall accuracy alone can hide a model that,
-say, never correctly identifies PD (the minority class, only 31 videos
-total in the base dataset) while still scoring well by being good at
-the majority classes.
-"""
-
 import os
 
 import matplotlib.pyplot as plt

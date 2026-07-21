@@ -1,4 +1,4 @@
-# Gait Disease Detection — MHI + CNN (Healthy / KOA / PD)
+# Gait Disease Detection — MHI + CNN (NM / KOA / PD)
 
 A modified reimplementation of *"Vision-based approach to knee osteoarthritis
 and Parkinson's disease detection utilizing human gait patterns"*
@@ -9,7 +9,7 @@ and Parkinson's disease detection utilizing human gait patterns"*
 ```
 Videos → Motion History Image (one MHI per video) → resize 224×224
        → Transfer-learning CNN (VGG16 / MobileNet / DenseNet)
-       → Fully Connected layers → Softmax → Healthy / KOA / PD
+       → Fully Connected layers → Softmax → NM / KOA / PD
 ```
 
 ## Why no GRU?

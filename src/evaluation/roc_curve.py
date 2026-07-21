@@ -1,11 +1,3 @@
-"""
-roc_curve.py
-============
-One-vs-rest ROC curves + AUC per class, plus a micro-average curve,
-matching the ROC/AUC analysis in the base paper (Fig. 7) but extended
-from their binary setup to the full 3-class case.
-"""
-
 import os
 
 import matplotlib.pyplot as plt

@@ -1,23 +1,3 @@
-"""
-callbacks.py
-============
-Standard training callbacks, justified individually:
-
-- ModelCheckpoint: always keep the weights from the epoch with the best
-  validation loss, not just whatever the last epoch happened to be --
-  final-epoch weights are frequently worse than an earlier checkpoint
-  once the model starts overfitting.
-- EarlyStopping: stop wasting compute (and risking overfitting) once
-  validation loss stops improving for `patience` epochs; restores the
-  best weights automatically.
-- ReduceLROnPlateau: when validation loss plateaus, shrink the learning
-  rate rather than stopping outright -- often lets the optimizer settle
-  into a sharper minimum before early stopping finally kicks in.
-- CSVLogger: durable per-epoch record of every metric, so training
-  curves (accuracy/loss plots) can be reproduced later without re-running
-  training.
-"""
-
 import os
 from typing import List
 

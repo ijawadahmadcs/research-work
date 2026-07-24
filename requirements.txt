@@ -1,4 +1,5 @@
 tensorflow>=2.15,<2.17
+keras-cv-attention-models>=1.4.0
 opencv-python-headless>=4.9
 numpy>=1.24
 pandas>=2.0

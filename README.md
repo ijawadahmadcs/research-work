@@ -55,15 +55,15 @@ python -m src.training.train --backbone mobilenet
 # 3) Evaluate on the held-out test set
 python -m src.evaluation.evaluate --backbone mobilenet
 
+# ...or run all three stages back-to-back:
+python -m src.main --stage all --backbone mobilenet
+```
+
 Notes:
 
 - `googlenet` is implemented with Keras InceptionV3, since TensorFlow does not expose InceptionV1 directly.
 - `ensemble` averages the predictions from `mobilenet`, `vgg16`, and `densenet` by default; adjust `src/utils/config.py` if you want a different fusion set.
-- `swin` is reserved as a selectable hook, but it requires an additional Swin-capable dependency that is not installed in this workspace yet.
-
-# ...or run all three stages back-to-back:
-python -m src.main --stage all --backbone mobilenet
-```
+- `swin` uses `keras-cv-attention-models` and is available once you install `requirements.txt`.
 
 ## Avoiding data leakage
 

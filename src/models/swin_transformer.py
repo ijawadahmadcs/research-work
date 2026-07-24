@@ -1,16 +1,64 @@
 """
 Swin Transformer backbone hook.
 
-This repository currently has no Swin-capable dependency installed, so
-the builder raises a clear error telling the user what to install.
+This uses Keras SwinTransformerV2 from keras-cv-attention-models.
+The backbone is built as a feature extractor and the classification head
+is added in this repository so stage-1 training still works when the
+backbone is frozen.
 """
+
+import tensorflow as tf
+from tensorflow.keras import Model, layers
 
 from src.utils.config import Config, DEFAULT_CONFIG
 
 
-def build_swin_transformer_model(cfg: Config = DEFAULT_CONFIG):
-    raise ImportError(
-        "Swin Transformer support is not available in the current environment. "
-        "Install a Swin-capable library such as keras-cv-attention-models or timm/transformers, "
-        "then wire the builder in src/models/swin_transformer.py."
+def _torch_preprocess(inputs: tf.Tensor) -> tf.Tensor:
+    mean = tf.constant([0.485, 0.456, 0.406], dtype=inputs.dtype)
+    std = tf.constant([0.229, 0.224, 0.225], dtype=inputs.dtype)
+    return (inputs - mean) / std
+
+
+def _build_swin_v2_backbone(input_shape):
+    try:
+        from keras_cv_attention_models import swin_transformer_v2
+    except ImportError as exc:  # pragma: no cover - depends on optional dependency
+        raise ImportError(
+            "Swin Transformer support requires the optional dependency 'keras-cv-attention-models'. "
+            "Install it with `pip install keras-cv-attention-models` and then rerun training."
+        ) from exc
+
+    return swin_transformer_v2.SwinTransformerV2Tiny_ns(
+        input_shape=input_shape,
+        num_classes=0,
+        pretrained="imagenet",
+        classifier_activation=None,
     )
+
+
+def build_swin_transformer_model(cfg: Config = DEFAULT_CONFIG):
+    input_shape = (cfg.image_size, cfg.image_size, 3)
+    inputs = tf.keras.Input(shape=input_shape, name="mhi_input")
+
+    x = inputs
+    if cfg.use_augmentation:
+        from src.preprocessing.augmentation import build_augmentation_pipeline
+
+        x = build_augmentation_pipeline()(x)
+
+    x = layers.Lambda(_torch_preprocess, name="swin_torch_preprocess")(x)
+
+    backbone = _build_swin_v2_backbone(input_shape)
+    backbone.trainable = not cfg.freeze_backbone
+    backbone._name = "swin_transformer_v2_tiny_ns_backbone"
+
+    x = backbone(x)
+    if x.shape.rank == 4:
+        x = layers.GlobalAveragePooling2D(name="gap")(x)
+    x = layers.Dense(cfg.dense_units, activation="relu", name="fc1")(x)
+    x = layers.Dropout(cfg.dropout_rate, name="dropout")(x)
+    outputs = layers.Dense(cfg.num_classes, activation="softmax", name="predictions")(x)
+
+    model = Model(inputs, outputs, name="SwinTransformerV2Tiny_ns_MHI_Classifier")
+    model.backbone = backbone
+    return model, backbone

@@ -8,6 +8,7 @@ classification.
 """
 
 import tensorflow as tf
+from tensorflow.keras import Model
 
 from src.models._shared import build_application_classifier
 from src.utils.config import Config, DEFAULT_CONFIG

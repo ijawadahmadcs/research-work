@@ -10,3 +10,4 @@ data/processed/*
 models/checkpoints/*
 outputs/logs/*
 *.keras
+.env

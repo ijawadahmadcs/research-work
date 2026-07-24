@@ -4,7 +4,7 @@ import os
 from src.evaluation.plots import plot_training_curves
 from src.preprocessing.video_loader import build_dataset
 from src.training.trainer import Trainer
-from src.utils.config import DEFAULT_CONFIG, MODELS_DIR, ensure_dirs
+from src.utils.config import BACKBONE_CHOICES, DEFAULT_CONFIG, MODELS_DIR, ensure_dirs
 from src.utils.logger import get_logger
 from src.utils.seed import set_global_seed
 
@@ -13,7 +13,7 @@ logger = get_logger(__name__)
 
 def main():
     parser = argparse.ArgumentParser(description="Train an MHI-based gait classifier.")
-    parser.add_argument("--backbone", choices=["vgg16", "mobilenet", "densenet"], default=DEFAULT_CONFIG.backbone)
+    parser.add_argument("--backbone", choices=BACKBONE_CHOICES, default=DEFAULT_CONFIG.backbone)
     parser.add_argument("--epochs-stage1", type=int, default=DEFAULT_CONFIG.epochs_stage1)
     parser.add_argument("--epochs-stage2", type=int, default=DEFAULT_CONFIG.epochs_stage2)
     parser.add_argument("--batch-size", type=int, default=DEFAULT_CONFIG.batch_size)

@@ -18,7 +18,7 @@ from src.evaluation.confusion_matrix import compute_confusion_matrix, plot_confu
 from src.evaluation.metrics import compute_metrics, metrics_to_percent_string
 from src.evaluation.roc_curve import plot_multiclass_roc
 from src.training.trainer import Trainer
-from src.utils.config import DEFAULT_CONFIG, MODELS_DIR, ensure_dirs
+from src.utils.config import BACKBONE_CHOICES, DEFAULT_CONFIG, MODELS_DIR, ensure_dirs
 from src.utils.logger import get_logger
 from src.utils.seed import set_global_seed
 
@@ -79,7 +79,7 @@ def run_evaluate(cfg, model=None):
 def main():
     parser = argparse.ArgumentParser(description="MHI-based gait disease classification pipeline.")
     parser.add_argument("--stage", choices=["preprocess", "train", "evaluate", "all"], default="all")
-    parser.add_argument("--backbone", choices=["vgg16", "mobilenet", "densenet"], default=DEFAULT_CONFIG.backbone)
+    parser.add_argument("--backbone", choices=BACKBONE_CHOICES, default=DEFAULT_CONFIG.backbone)
     args = parser.parse_args()
 
     cfg = DEFAULT_CONFIG

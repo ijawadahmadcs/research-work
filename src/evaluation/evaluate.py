@@ -9,7 +9,7 @@ from src.evaluation.confusion_matrix import compute_confusion_matrix, plot_confu
 from src.evaluation.metrics import compute_metrics, metrics_to_percent_string
 from src.evaluation.roc_curve import plot_multiclass_roc
 from src.preprocessing.video_loader import build_dataset
-from src.utils.config import DEFAULT_CONFIG, MODELS_DIR, OUTPUTS_DIR
+from src.utils.config import BACKBONE_CHOICES, DEFAULT_CONFIG, MODELS_DIR, OUTPUTS_DIR
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -17,7 +17,7 @@ logger = get_logger(__name__)
 
 def main():
     parser = argparse.ArgumentParser(description="Evaluate a trained MHI gait classifier on the test split.")
-    parser.add_argument("--backbone", choices=["vgg16", "mobilenet", "densenet"], default=DEFAULT_CONFIG.backbone)
+    parser.add_argument("--backbone", choices=BACKBONE_CHOICES, default=DEFAULT_CONFIG.backbone)
     parser.add_argument("--model-path", default=None, help="Override path to a .keras model file.")
     args = parser.parse_args()
 

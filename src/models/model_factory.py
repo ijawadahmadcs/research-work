@@ -34,8 +34,13 @@ from typing import Tuple
 import tensorflow as tf
 from tensorflow.keras import Model
 
+from src.models.efficientnet import build_efficientnet_model
+from src.models.ensemble import build_ensemble_model
+from src.models.googlenet import build_googlenet_model
 from src.models.densenet import build_densenet_model
 from src.models.mobilenet import build_mobilenet_model
+from src.models.nasnet import build_nasnet_model
+from src.models.swin_transformer import build_swin_transformer_model
 from src.models.vgg16 import build_vgg16_model
 from src.utils.config import Config, DEFAULT_CONFIG
 
@@ -43,6 +48,12 @@ _BUILDERS = {
     "vgg16": build_vgg16_model,
     "mobilenet": build_mobilenet_model,
     "densenet": build_densenet_model,
+    "efficientnet": build_efficientnet_model,
+    "nasnet": build_nasnet_model,
+    "googlenet": build_googlenet_model,
+    "inceptionv3": build_googlenet_model,
+    "swin": build_swin_transformer_model,
+    "ensemble": build_ensemble_model,
 }
 
 
@@ -66,12 +77,16 @@ def unfreeze_for_fine_tuning(backbone: tf.keras.Model, fine_tune_at_layer: int =
     task-specific features that benefit from adapting to MHI statistics
     (which look nothing like natural ImageNet photos).
     """
-    backbone.trainable = True
-    n_layers = len(backbone.layers)
+    if isinstance(backbone, (list, tuple)):
+        for member in backbone:
+            unfreeze_for_fine_tuning(member, fine_tune_at_layer)
+        return
+
+    target = getattr(backbone, "backbone", backbone)
+    target.trainable = True
+    n_layers = len(target.layers)
     freeze_until = n_layers + fine_tune_at_layer if fine_tune_at_layer < 0 else fine_tune_at_layer
-    for i, layer in enumerate(backbone.layers):
+    for i, layer in enumerate(target.layers):
         layer.trainable = i >= freeze_until
-        # Keep BatchNorm layers frozen even when "unfrozen" by index -- updating
-        # BN running statistics on a small dataset destabilizes training badly.
         if isinstance(layer, tf.keras.layers.BatchNormalization):
             layer.trainable = False

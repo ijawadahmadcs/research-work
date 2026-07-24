@@ -8,8 +8,8 @@ and Parkinson's disease detection utilizing human gait patterns"*
 
 ```
 Videos → Motion History Image (one MHI per video) → resize 224×224
-       → Transfer-learning CNN (VGG16 / MobileNet / DenseNet)
-       → Fully Connected layers → Softmax → NM / KOA / PD
+       → Transfer-learning CNN (VGG16 / MobileNet / DenseNet / EfficientNet / NASNet / InceptionV3)
+       → Fully Connected layers or model fusion → Softmax → NM / KOA / PD
 ```
 
 ## Why no GRU?
@@ -49,11 +49,17 @@ data/raw_videos/NM/*.mov
 # 1) Generate MHIs from raw videos and create a subject-wise train/val/test split
 python -m src.preprocessing.preprocessing
 
-# 2) Train (choose a backbone: vgg16 | mobilenet | densenet)
+# 2) Train (choose a backbone: vgg16 | mobilenet | densenet | efficientnet | nasnet | googlenet | inceptionv3 | ensemble)
 python -m src.training.train --backbone mobilenet
 
 # 3) Evaluate on the held-out test set
 python -m src.evaluation.evaluate --backbone mobilenet
+
+Notes:
+
+- `googlenet` is implemented with Keras InceptionV3, since TensorFlow does not expose InceptionV1 directly.
+- `ensemble` averages the predictions from `mobilenet`, `vgg16`, and `densenet` by default; adjust `src/utils/config.py` if you want a different fusion set.
+- `swin` is reserved as a selectable hook, but it requires an additional Swin-capable dependency that is not installed in this workspace yet.
 
 # ...or run all three stages back-to-back:
 python -m src.main --stage all --backbone mobilenet

@@ -16,6 +16,17 @@ RESULTS_DIR = os.path.join(PROJECT_ROOT, "results")
 
 CLASS_NAMES: List[str] = ["NM", "KOA", "PD"]
 CLASS_TO_IDX = {name: idx for idx, name in enumerate(CLASS_NAMES)}
+BACKBONE_CHOICES: List[str] = [
+    "vgg16",
+    "mobilenet",
+    "densenet",
+    "efficientnet",
+    "nasnet",
+    "googlenet",
+    "inceptionv3",
+    "swin",
+    "ensemble",
+]
 
 RAW_CLASS_DIRS = {"NM": "NM", "KOA": "KOA", "PD": "PD"}
 
@@ -38,7 +49,8 @@ class Config:
     random_seed: int = 42
     subject_wise_split: bool = True   # CRITICAL for avoiding data leakage (see preprocessing.py)
 
-    backbone: str = "mobilenet"       # one of: "vgg16", "mobilenet", "densenet"
+    backbone: str = "mobilenet"       # see BACKBONE_CHOICES
+    ensemble_backbones: List[str] = field(default_factory=lambda: ["mobilenet", "vgg16", "densenet"])
     num_classes: int = 3
     dropout_rate: float = 0.4
     dense_units: int = 128

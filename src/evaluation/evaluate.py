@@ -1,5 +1,7 @@
 import argparse
 import os
+import tempfile
+import zipfile
 
 import numpy as np
 import pandas as pd
@@ -15,6 +17,29 @@ from src.utils.logger import get_logger
 logger = get_logger(__name__)
 
 
+def _load_model_from_keras_archive(model_path: str, cfg):
+    """Build the model architecture, then restore weights from the .keras zip archive.
+
+    The saved .keras file serialised a Lambda layer referencing a Python
+    function by name, which cannot be round-tripped by tf_keras's deserialiser.
+    We therefore rebuild the identical architecture with model_factory and load
+    only the weights from the ``model.weights.h5`` entry inside the archive.
+    """
+    from src.models.model_factory import build_model
+
+    logger.info("Rebuilding model architecture for weight loading …")
+    model, _ = build_model(cfg)
+
+    with zipfile.ZipFile(model_path, "r") as zf:
+        with tempfile.TemporaryDirectory() as tmp:
+            zf.extract("model.weights.h5", tmp)
+            weights_path = os.path.join(tmp, "model.weights.h5")
+            model.load_weights(weights_path)
+
+    logger.info("Weights loaded successfully.")
+    return model
+
+
 def main():
     parser = argparse.ArgumentParser(description="Evaluate a trained MHI gait classifier on the test split.")
     parser.add_argument("--backbone", choices=BACKBONE_CHOICES, default=DEFAULT_CONFIG.backbone)
@@ -26,7 +51,7 @@ def main():
 
     model_path = args.model_path or os.path.join(MODELS_DIR, f"{cfg.backbone}_final_model.keras")
     logger.info(f"Loading model from {model_path}")
-    model = tf.keras.models.load_model(model_path)
+    model = _load_model_from_keras_archive(model_path, cfg)
 
     test_ds, n_test = build_dataset("test", cfg, shuffle=False)
     logger.info(f"Evaluating on {n_test} held-out test samples.")

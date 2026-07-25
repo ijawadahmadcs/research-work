@@ -49,7 +49,7 @@ data/raw_videos/NM/*.mov
 # 1) Generate MHIs from raw videos and create a subject-wise train/val/test split
 python -m src.preprocessing.preprocessing
 
-# 2) Train (choose a backbone: vgg16 | mobilenet | densenet | efficientnet | nasnet | googlenet | inceptionv3 | ensemble)
+# 2) Train (choose a backbone: vgg16 | mobilenet | densenet | efficientnet | nasnet | googlenet | inceptionv3 | ensemble | swin)
 python -m src.training.train --backbone mobilenet
 
 # 3) Evaluate on the held-out test set

@@ -1,6 +1,12 @@
 import argparse
 import os
 
+# keras-cv-attention-models uses raw TF ops (e.g. tf.reshape) on Keras tensors,
+# which is incompatible with standalone Keras 3 (shipped with TF >= 2.16).
+# Setting this env-var before any TF/Keras import forces the use of the legacy
+# tf-keras 2.x API bundled with TensorFlow.  Requires: pip install tf-keras~=2.21
+os.environ.setdefault("TF_USE_LEGACY_KERAS", "1")
+
 from src.evaluation.plots import plot_training_curves
 from src.preprocessing.video_loader import build_dataset
 from src.training.trainer import Trainer

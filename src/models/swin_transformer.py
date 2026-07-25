@@ -13,10 +13,21 @@ from tensorflow.keras import Model, layers
 from src.utils.config import Config, DEFAULT_CONFIG
 
 
-def _torch_preprocess(inputs: tf.Tensor) -> tf.Tensor:
-    mean = tf.constant([0.485, 0.456, 0.406], dtype=inputs.dtype)
-    std = tf.constant([0.229, 0.224, 0.225], dtype=inputs.dtype)
-    return (inputs - mean) / std
+class SwinTorchPreprocess(layers.Layer):
+    """Normalise inputs with ImageNet-style mean/std (PyTorch convention).
+
+    Replaces the former ``Lambda(_torch_preprocess)`` layer so that the
+    layer can be serialised and deserialised by Keras 3.x without requiring
+    ``safe_mode=False`` or pickling a Python lambda.
+    """
+
+    def call(self, inputs):
+        mean = tf.constant([0.485, 0.456, 0.406], dtype=inputs.dtype)
+        std = tf.constant([0.229, 0.224, 0.225], dtype=inputs.dtype)
+        return (inputs - mean) / std
+
+    def get_config(self):
+        return super().get_config()
 
 
 def _build_swin_v2_backbone(input_shape):
@@ -46,7 +57,7 @@ def build_swin_transformer_model(cfg: Config = DEFAULT_CONFIG):
 
         x = build_augmentation_pipeline()(x)
 
-    x = layers.Lambda(_torch_preprocess, name="swin_torch_preprocess")(x)
+    x = SwinTorchPreprocess(name="swin_torch_preprocess")(x)
 
     backbone = _build_swin_v2_backbone(input_shape)
     backbone.trainable = not cfg.freeze_backbone
@@ -62,3 +73,4 @@ def build_swin_transformer_model(cfg: Config = DEFAULT_CONFIG):
     model = Model(inputs, outputs, name="SwinTransformerV2Tiny_ns_MHI_Classifier")
     model.backbone = backbone
     return model, backbone
+

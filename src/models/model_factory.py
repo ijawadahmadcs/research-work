@@ -42,7 +42,7 @@ from src.models.mobilenet import build_mobilenet_model
 from src.models.nasnet import build_nasnet_model
 from src.models.swin_transformer import build_swin_transformer_model
 from src.models.vgg16 import build_vgg16_model
-from src.utils.config import Config, DEFAULT_CONFIG
+from src.utils.config import Config, DEFAULT_CONFIG, BACKBONE_FINE_TUNE_LAYERS
 
 _BUILDERS = {
     "vgg16": build_vgg16_model,
@@ -67,26 +67,66 @@ def build_model(cfg: Config = DEFAULT_CONFIG) -> Tuple[Model, tf.keras.Model]:
     return _BUILDERS[backbone_key](cfg)
 
 
-def unfreeze_for_fine_tuning(backbone: tf.keras.Model, fine_tune_at_layer: int = -30) -> None:
+def get_fine_tune_layer_count(backbone_key: str, cfg: Config) -> int:
     """
-    Unfreeze only the last `abs(fine_tune_at_layer)` layers of the backbone
+    Return the number of backbone layers to unfreeze for stage-2 fine-tuning.
+
+    Priority:
+    1. Per-backbone defaults from BACKBONE_FINE_TUNE_LAYERS if
+       cfg.use_per_backbone_fine_tune_layers is True.
+    2. cfg.fine_tune_at_layer (the global fallback, expressed as a negative
+       index: -N means the last N layers).
+    """
+    if cfg.use_per_backbone_fine_tune_layers:
+        key = backbone_key.lower()
+        if key in BACKBONE_FINE_TUNE_LAYERS:
+            return BACKBONE_FINE_TUNE_LAYERS[key]
+    # Fallback: use the signed index from config
+    return abs(cfg.fine_tune_at_layer)
+
+
+def unfreeze_for_fine_tuning(
+    backbone: tf.keras.Model,
+    fine_tune_at_layer: int = -40,
+    backbone_key: str = None,
+    cfg: Config = None,
+) -> None:
+    """
+    Unfreeze only the last ``abs(fine_tune_at_layer)`` layers of the backbone
     for stage-2 fine-tuning, keeping earlier (more generic, ImageNet-level)
-    layers frozen. This is the standard "partial fine-tuning" recipe:
-    early conv layers encode generic edge/texture detectors that transfer
-    well regardless of domain, while later layers encode more
-    task-specific features that benefit from adapting to MHI statistics
-    (which look nothing like natural ImageNet photos).
+    layers frozen.
+
+    Early conv layers encode generic edge/texture detectors that transfer
+    well regardless of domain, while later layers encode more task-specific
+    features that benefit from adapting to MHI statistics (which look nothing
+    like natural ImageNet photos).
+
+    BatchNormalization layers are KEPT FROZEN throughout fine-tuning.  Unfreezing
+    BN layers with small MHI mini-batches would corrupt the running statistics
+    that the backbone relied on when pre-trained on ImageNet, destabilising the
+    early conv features we want to preserve.
     """
     if isinstance(backbone, (list, tuple)):
         for member in backbone:
-            unfreeze_for_fine_tuning(member, fine_tune_at_layer)
+            unfreeze_for_fine_tuning(
+                member, fine_tune_at_layer, backbone_key=backbone_key, cfg=cfg
+            )
         return
+
+    # Determine how many layers to unfreeze
+    if cfg is not None and backbone_key is not None:
+        n_unfreeze = get_fine_tune_layer_count(backbone_key, cfg)
+    else:
+        n_unfreeze = abs(fine_tune_at_layer)
 
     target = getattr(backbone, "backbone", backbone)
     target.trainable = True
     n_layers = len(target.layers)
-    freeze_until = n_layers + fine_tune_at_layer if fine_tune_at_layer < 0 else fine_tune_at_layer
+    freeze_until = n_layers - n_unfreeze
+
     for i, layer in enumerate(target.layers):
-        layer.trainable = i >= freeze_until
         if isinstance(layer, tf.keras.layers.BatchNormalization):
+            # Always keep BN frozen to preserve ImageNet running statistics.
             layer.trainable = False
+        else:
+            layer.trainable = i >= freeze_until

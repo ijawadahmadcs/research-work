@@ -1,10 +1,18 @@
 """
-Swin Transformer backbone hook.
+swin_transformer.py
+===================
+Swin Transformer V2 Tiny backbone hook.
 
-This uses Keras SwinTransformerV2 from keras-cv-attention-models.
+This uses SwinTransformerV2Tiny_ns from keras-cv-attention-models.
 The backbone is built as a feature extractor and the classification head
 is added in this repository so stage-1 training still works when the
 backbone is frozen.
+
+Key changes vs. original
+-------------------------
+- Augmentation removed from model graph (now in tf.data pipeline).
+- Classifier head upgraded to match _shared.py (two Dense layers, GELU,
+  BatchNorm, two Dropout layers).
 """
 
 import tensorflow as tf
@@ -19,6 +27,8 @@ class SwinTorchPreprocess(layers.Layer):
     Replaces the former ``Lambda(_torch_preprocess)`` layer so that the
     layer can be serialised and deserialised by Keras 3.x without requiring
     ``safe_mode=False`` or pickling a Python lambda.
+
+    Input is expected to be float32 in [0, 1].
     """
 
     def call(self, inputs):
@@ -33,10 +43,12 @@ class SwinTorchPreprocess(layers.Layer):
 def _build_swin_v2_backbone(input_shape):
     try:
         from keras_cv_attention_models import swin_transformer_v2
-    except ImportError as exc:  # pragma: no cover - depends on optional dependency
+    except ImportError as exc:  # pragma: no cover
         raise ImportError(
-            "Swin Transformer support requires the optional dependency 'keras-cv-attention-models'. "
-            "Install it with `pip install keras-cv-attention-models` and then rerun training."
+            "Swin Transformer support requires the optional dependency "
+            "'keras-cv-attention-models'. "
+            "Install it with `pip install keras-cv-attention-models` "
+            "and then rerun training."
         ) from exc
 
     return swin_transformer_v2.SwinTransformerV2Tiny_ns(
@@ -51,26 +63,30 @@ def build_swin_transformer_model(cfg: Config = DEFAULT_CONFIG):
     input_shape = (cfg.image_size, cfg.image_size, 3)
     inputs = tf.keras.Input(shape=input_shape, name="mhi_input")
 
-    x = inputs
-    if cfg.use_augmentation:
-        from src.preprocessing.augmentation import build_augmentation_pipeline
-
-        x = build_augmentation_pipeline()(x)
-
-    x = SwinTorchPreprocess(name="swin_torch_preprocess")(x)
+    # Augmentation is now in the tf.data pipeline; do NOT apply it here.
+    # Preprocess: [0, 1] → ImageNet mean/std normalisation
+    x = SwinTorchPreprocess(name="swin_torch_preprocess")(inputs)
 
     backbone = _build_swin_v2_backbone(input_shape)
     backbone.trainable = not cfg.freeze_backbone
     backbone._name = "swin_transformer_v2_tiny_ns_backbone"
 
-    x = backbone(x)
+    x = backbone(x, training=False)
     if x.shape.rank == 4:
         x = layers.GlobalAveragePooling2D(name="gap")(x)
-    x = layers.Dense(cfg.dense_units, activation="relu", name="fc1")(x)
-    x = layers.Dropout(cfg.dropout_rate, name="dropout")(x)
+
+    # ── Improved classification head (matches _shared.py) ────────────────────
+    x = layers.Dense(cfg.dense_units, name="fc1")(x)
+    x = layers.Activation("gelu", name="fc1_gelu")(x)
+    x = layers.BatchNormalization(name="fc1_bn")(x)
+    x = layers.Dropout(cfg.dropout_rate, name="dropout1")(x)
+
+    x = layers.Dense(cfg.dense_units2, name="fc2")(x)
+    x = layers.Activation("gelu", name="fc2_gelu")(x)
+    x = layers.Dropout(cfg.dropout_rate2, name="dropout2")(x)
+
     outputs = layers.Dense(cfg.num_classes, activation="softmax", name="predictions")(x)
 
     model = Model(inputs, outputs, name="SwinTransformerV2Tiny_ns_MHI_Classifier")
     model.backbone = backbone
     return model, backbone
-

@@ -1,6 +1,6 @@
 import os
 from dataclasses import dataclass, field
-from typing import List, Union
+from typing import Dict, List, Optional, Union
 
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 
@@ -30,46 +30,86 @@ BACKBONE_CHOICES: List[str] = [
 
 RAW_CLASS_DIRS = {"NM": "NM", "KOA": "KOA", "PD": "PD"}
 
+# Per-model fine-tuning layer counts (how many layers from the end to unfreeze).
+# Larger models need more layers unfrozen to adapt to MHI statistics.
+BACKBONE_FINE_TUNE_LAYERS: Dict[str, int] = {
+    "vgg16": 8,          # unfreeze block4_pool onwards (both conv blocks 4 & 5)
+    "mobilenet": 30,     # unfreeze from block_14 depthwise blocks
+    "densenet": 50,      # unfreeze last dense block + transition
+    "efficientnet": 40,  # unfreeze last 3 MBConv blocks
+    "nasnet": 40,        # unfreeze last 4 normal cells
+    "googlenet": 30,     # inceptionv3: unfreeze last mixed layers
+    "inceptionv3": 30,
+    "swin": 40,          # unfreeze last 2 Swin stages
+    "ensemble": 40,      # fallback — each member uses its own default
+}
+
 
 @dataclass
 class Config:
+    # ── MHI generation ──────────────────────────────────────────────────────
     image_size: int = 224
-    mhi_duration: int = 30            # tau: number of most-recent frames that stay "hot" in the MHI
-    binary_threshold: Union[int, str] = "auto"  # "auto" = per-frame Otsu threshold (adapts to each
-                                                 # video's own lighting/contrast); set an int to force
-                                                 # a fixed threshold instead
-    mhi_min_threshold: int = 12       # floor under an "auto" threshold, guards against noise-only
-                                       # frame pairs producing "TV static" MHIs -- see mhi_generator.py
-    mhi_morph_open_kernel: int = 3    # morphological-opening kernel size to erase isolated noise
-                                       # pixels from the motion mask; 0 disables this cleanup step
-    mhi_decay: float = 1.0            # decay step per frame (linear ramp), see mhi_generator.py
+    mhi_duration: int = 30            # tau: frames that stay "hot"
+    binary_threshold: Union[int, str] = "auto"  # "auto" = per-frame Otsu
+    mhi_min_threshold: int = 12       # floor for auto-threshold
+    mhi_morph_open_kernel: int = 3    # morphological-open kernel; 0 = disabled
+    mhi_decay: float = 1.0            # decay step per frame
+    mhi_colorize: bool = False        # if True, save 3-channel jet-colorized MHI
 
+    # ── Dataset splitting ────────────────────────────────────────────────────
     test_size: float = 0.15
-    val_size: float = 0.15            # taken out of the remaining train split
+    val_size: float = 0.15            # fraction of (train+val) that becomes val
     random_seed: int = 42
-    subject_wise_split: bool = True   # CRITICAL for avoiding data leakage (see preprocessing.py)
+    subject_wise_split: bool = True   # CRITICAL: prevents within-subject leakage
 
-    backbone: str = "mobilenet"       # see BACKBONE_CHOICES
-    ensemble_backbones: List[str] = field(default_factory=lambda: ["mobilenet", "vgg16", "densenet"])
+    # ── Model ────────────────────────────────────────────────────────────────
+    backbone: str = "mobilenet"
+    ensemble_backbones: List[str] = field(
+        default_factory=lambda: ["mobilenet", "efficientnet", "densenet"]
+    )
     num_classes: int = 3
-    dropout_rate: float = 0.4
-    dense_units: int = 128
-    freeze_backbone: bool = True      # freeze_backbone=True -> feature extraction; then fine_tune_at unfreezes some
+    dropout_rate: float = 0.30        # was 0.40; reduced to lower regularisation
+    dropout_rate2: float = 0.20       # second dropout in the two-layer head
+    dense_units: int = 256            # was 128; wider head for richer features
+    dense_units2: int = 128           # second FC layer
+    freeze_backbone: bool = True
 
+    # ── Fine-tuning ──────────────────────────────────────────────────────────
     fine_tune: bool = True
-    fine_tune_at_layer: int = -30     # unfreeze the last N layers of the backbone during stage 2
+    fine_tune_at_layer: int = -40     # default; overridden per-backbone in model_factory
+    use_per_backbone_fine_tune_layers: bool = True  # use BACKBONE_FINE_TUNE_LAYERS dict
 
+    # ── Training schedule ────────────────────────────────────────────────────
     batch_size: int = 16
-    epochs_stage1: int = 30           # frozen-backbone warmup (train head only)
-    epochs_stage2: int = 50           # fine-tuning stage
+    epochs_stage1: int = 40           # head-only warmup (more epochs with cosine decay)
+    epochs_stage2: int = 60           # fine-tuning stage
     learning_rate_stage1: float = 1e-3
-    learning_rate_stage2: float = 1e-5
-    early_stopping_patience: int = 10
-    lr_reduce_patience: int = 5
+    learning_rate_stage2: float = 5e-5  # was 1e-5; slightly higher for more fine-tune progress
+
+    # AdamW
+    weight_decay: float = 1e-4        # L2 weight decay (AdamW)
+
+    # Cosine decay + warmup (stage 1)
+    warmup_epochs: int = 5            # linear warmup before cosine decay
+
+    # ReduceLROnPlateau (used in stage 2 as a safety net)
+    early_stopping_patience: int = 15  # was 10; give more room with cosine schedule
+    lr_reduce_patience: int = 7
     lr_reduce_factor: float = 0.5
+    min_lr: float = 1e-8
 
+    # ── Loss ─────────────────────────────────────────────────────────────────
+    label_smoothing: float = 0.08     # smoothed cross-entropy for calibration
+    use_class_weights: bool = True    # inverse-frequency weighting to help PD
+
+    # ── Augmentation ─────────────────────────────────────────────────────────
     use_augmentation: bool = True
+    augmentation_in_model: bool = False  # MUST be False: augmentation runs in tf.data
 
+    # ── Precision ────────────────────────────────────────────────────────────
+    use_mixed_precision: bool = False  # set True if GPU supports float16
+
+    # ── Class names ──────────────────────────────────────────────────────────
     class_names: List[str] = field(default_factory=lambda: list(CLASS_NAMES))
 
 
@@ -85,5 +125,7 @@ def ensure_dirs(cfg: Config = DEFAULT_CONFIG) -> None:
         os.path.join(OUTPUTS_DIR, "roc_curves"),
         os.path.join(OUTPUTS_DIR, "predictions"),
         os.path.join(OUTPUTS_DIR, "logs"),
+        os.path.join(OUTPUTS_DIR, "tensorboard"),
+        os.path.join(RESULTS_DIR, "ensemble"),
     ]:
         os.makedirs(d, exist_ok=True)

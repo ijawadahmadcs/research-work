@@ -80,6 +80,7 @@ def generate_all_mhis(df: pd.DataFrame, cfg: Config = DEFAULT_CONFIG) -> pd.Data
                 decay=cfg.mhi_decay, resize_to=cfg.image_size,
                 min_threshold=cfg.mhi_min_threshold,
                 morph_open_kernel_size=cfg.mhi_morph_open_kernel,
+                colorize=getattr(cfg, "mhi_colorize", False),
             )
             mhi_paths.append(out_path)
         except (IOError, ValueError) as e:

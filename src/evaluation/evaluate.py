@@ -1,7 +1,18 @@
+"""
+evaluate.py
+===========
+Standalone evaluation script: loads a saved model, runs it on the
+held-out test split, and writes a full suite of metrics, confusion
+matrices, ROC curves, and a predictions CSV.
+
+Usage
+-----
+    python -m src.evaluation.evaluate --backbone mobilenet
+    python -m src.evaluation.evaluate --backbone efficientnet --model-path /path/to/custom.keras
+"""
+
 import argparse
 import os
-import tempfile
-import zipfile
 
 import numpy as np
 import pandas as pd
@@ -17,73 +28,103 @@ from src.utils.logger import get_logger
 logger = get_logger(__name__)
 
 
-def _load_model_from_keras_archive(model_path: str, cfg):
-    """Build the model architecture, then restore weights from the .keras zip archive.
-
-    The saved .keras file serialised a Lambda layer referencing a Python
-    function by name, which cannot be round-tripped by tf_keras's deserialiser.
-    We therefore rebuild the identical architecture with model_factory and load
-    only the weights from the ``model.weights.h5`` entry inside the archive.
+def collect_predictions(model, test_ds):
     """
-    from src.models.model_factory import build_model
+    Run the model over the entire test dataset and collect true labels and
+    predicted probabilities.
 
-    logger.info("Rebuilding model architecture for weight loading …")
-    model, _ = build_model(cfg)
+    Returns
+    -------
+    y_true       : 1-D int array of true class indices.
+    y_pred_proba : (N, C) float array of softmax probabilities.
+    """
+    y_true_list, y_pred_proba_list = [], []
+    for images, labels in test_ds:
+        preds = model.predict(images, verbose=0)
+        y_pred_proba_list.append(preds)
+        y_true_list.append(np.argmax(labels.numpy(), axis=1))
 
-    with zipfile.ZipFile(model_path, "r") as zf:
-        with tempfile.TemporaryDirectory() as tmp:
-            zf.extract("model.weights.h5", tmp)
-            weights_path = os.path.join(tmp, "model.weights.h5")
-            model.load_weights(weights_path)
-
-    logger.info("Weights loaded successfully.")
-    return model
+    y_true = np.concatenate(y_true_list)
+    y_pred_proba = np.concatenate(y_pred_proba_list)
+    return y_true, y_pred_proba
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Evaluate a trained MHI gait classifier on the test split.")
+    parser = argparse.ArgumentParser(
+        description="Evaluate a trained MHI gait classifier on the test split."
+    )
     parser.add_argument("--backbone", choices=BACKBONE_CHOICES, default=DEFAULT_CONFIG.backbone)
-    parser.add_argument("--model-path", default=None, help="Override path to a .keras model file.")
+    parser.add_argument(
+        "--model-path", default=None,
+        help="Override path to a .keras model file.",
+    )
     args = parser.parse_args()
 
     cfg = DEFAULT_CONFIG
     cfg.backbone = args.backbone
+    # Disable augmentation at evaluation time (should already be False in cfg,
+    # but explicitly set it here as a safeguard).
+    cfg.use_augmentation = False
 
-    model_path = args.model_path or os.path.join(MODELS_DIR, f"{cfg.backbone}_final_model.keras")
+    model_path = args.model_path or os.path.join(
+        MODELS_DIR, f"{cfg.backbone}_final_model.keras"
+    )
     logger.info(f"Loading model from {model_path}")
-    model = _load_model_from_keras_archive(model_path, cfg)
+
+    # Load model — try direct load first, then fallback to weight-only load
+    try:
+        model = tf.keras.models.load_model(model_path)
+        logger.info("Model loaded via tf.keras.models.load_model().")
+    except Exception as e:
+        logger.warning(f"Direct load failed ({e}); falling back to architecture rebuild + weight load.")
+        from src.models.model_factory import build_model
+        import zipfile, tempfile
+        model, _ = build_model(cfg)
+        with zipfile.ZipFile(model_path, "r") as zf:
+            with tempfile.TemporaryDirectory() as tmp:
+                zf.extract("model.weights.h5", tmp)
+                model.load_weights(os.path.join(tmp, "model.weights.h5"))
+        logger.info("Weights loaded via fallback path.")
 
     test_ds, n_test = build_dataset("test", cfg, shuffle=False)
     logger.info(f"Evaluating on {n_test} held-out test samples.")
 
-    y_true, y_pred_proba = [], []
-    for images, labels in test_ds:
-        preds = model.predict(images, verbose=0)
-        y_pred_proba.append(preds)
-        y_true.append(np.argmax(labels.numpy(), axis=1))
-
-    y_true = np.concatenate(y_true)
-    y_pred_proba = np.concatenate(y_pred_proba)
+    y_true, y_pred_proba = collect_predictions(model, test_ds)
     y_pred = np.argmax(y_pred_proba, axis=1)
 
-    metrics = compute_metrics(y_true, y_pred, cfg.class_names)
+    # ── Full metric suite ─────────────────────────────────────────────────
+    metrics = compute_metrics(
+        y_true, y_pred, cfg.class_names, y_pred_proba=y_pred_proba
+    )
     logger.info(metrics_to_percent_string(metrics))
     logger.info("\n" + metrics["report_text"])
 
+    # ── Confusion matrices ────────────────────────────────────────────────
     cm = compute_confusion_matrix(y_true, y_pred, cfg.class_names)
     plot_confusion_matrix(cm, cfg.class_names, cfg.backbone, normalize=False)
     plot_confusion_matrix(cm, cfg.class_names, cfg.backbone, normalize=True)
+
+    # ── ROC curves ────────────────────────────────────────────────────────
     plot_multiclass_roc(y_true, y_pred_proba, cfg.class_names, cfg.backbone)
 
+    # ── Predictions CSV ───────────────────────────────────────────────────
     predictions_dir = os.path.join(OUTPUTS_DIR, "predictions")
     os.makedirs(predictions_dir, exist_ok=True)
-    pred_df = pd.DataFrame({
-        "true_label": [cfg.class_names[i] for i in y_true],
-        "predicted_label": [cfg.class_names[i] for i in y_pred],
-        **{f"prob_{name}": y_pred_proba[:, i] for i, name in enumerate(cfg.class_names)},
-    })
-    pred_df.to_csv(os.path.join(predictions_dir, f"{cfg.backbone}_test_predictions.csv"), index=False)
-    logger.info(f"Wrote predictions to {predictions_dir}")
+    pred_df = pd.DataFrame(
+        {
+            "true_label": [cfg.class_names[i] for i in y_true],
+            "predicted_label": [cfg.class_names[i] for i in y_pred],
+            **{
+                f"prob_{name}": y_pred_proba[:, i]
+                for i, name in enumerate(cfg.class_names)
+            },
+        }
+    )
+    csv_path = os.path.join(
+        predictions_dir, f"{cfg.backbone}_test_predictions.csv"
+    )
+    pred_df.to_csv(csv_path, index=False)
+    logger.info(f"Predictions written to {csv_path}")
 
 
 if __name__ == "__main__":

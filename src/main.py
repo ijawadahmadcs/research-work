@@ -7,9 +7,14 @@ Single entry point running the full pipeline end-to-end:
     python -m src.main --stage preprocess
     python -m src.main --stage train --backbone vgg16
     python -m src.main --stage evaluate --backbone vgg16
+    python -m src.main --stage ensemble
+    python -m src.main --stage train_all
 """
 
 import argparse
+import os
+
+import numpy as np
 
 from src.preprocessing.preprocessing import run_full_preprocessing
 from src.preprocessing.video_loader import build_dataset
@@ -18,12 +23,11 @@ from src.evaluation.confusion_matrix import compute_confusion_matrix, plot_confu
 from src.evaluation.metrics import compute_metrics, metrics_to_percent_string
 from src.evaluation.roc_curve import plot_multiclass_roc
 from src.training.trainer import Trainer
-from src.utils.config import BACKBONE_CHOICES, DEFAULT_CONFIG, MODELS_DIR, ensure_dirs
+from src.utils.config import (
+    BACKBONE_CHOICES, DEFAULT_CONFIG, MODELS_DIR, ensure_dirs
+)
 from src.utils.logger import get_logger
 from src.utils.seed import set_global_seed
-
-import os
-import numpy as np
 
 logger = get_logger("main")
 
@@ -52,6 +56,10 @@ def run_train(cfg):
 def run_evaluate(cfg, model=None):
     import tensorflow as tf
     logger.info(f"### STAGE: evaluation ({cfg.backbone}) ###")
+
+    # Disable augmentation at evaluation time
+    cfg.use_augmentation = False
+
     if model is None:
         model_path = os.path.join(MODELS_DIR, f"{cfg.backbone}_final_model.keras")
         model = tf.keras.models.load_model(model_path)
@@ -68,22 +76,66 @@ def run_evaluate(cfg, model=None):
     y_pred_proba = np.concatenate(y_pred_proba)
     y_pred = np.argmax(y_pred_proba, axis=1)
 
-    metrics = compute_metrics(y_true, y_pred, cfg.class_names)
+    metrics = compute_metrics(
+        y_true, y_pred, cfg.class_names, y_pred_proba=y_pred_proba
+    )
     logger.info(metrics_to_percent_string(metrics))
+    logger.info("\n" + metrics["report_text"])
 
     cm = compute_confusion_matrix(y_true, y_pred, cfg.class_names)
     plot_confusion_matrix(cm, cfg.class_names, cfg.backbone, normalize=True)
     plot_multiclass_roc(y_true, y_pred_proba, cfg.class_names, cfg.backbone)
 
 
+def run_train_all(cfg):
+    """Train all individual backbones sequentially."""
+    import tensorflow as tf
+
+    backbones = ["mobilenet", "efficientnet", "densenet", "vgg16", "nasnet", "swin"]
+    for backbone in backbones:
+        logger.info(f"\n{'='*60}")
+        logger.info(f"  Training backbone: {backbone}")
+        logger.info(f"{'='*60}")
+        cfg.backbone = backbone
+        set_global_seed(cfg.random_seed)
+        try:
+            run_train(cfg)
+            run_evaluate(cfg)
+        except Exception as e:
+            logger.error(f"Failed to train/evaluate {backbone}: {e}")
+        tf.keras.backend.clear_session()
+
+
+def run_ensemble(cfg):
+    """Run the full late-fusion ensemble evaluation."""
+    logger.info("### STAGE: ensemble evaluation ###")
+    from src.evaluation.ensemble_eval import main as ensemble_main
+    ensemble_main()
+
+
 def main():
-    parser = argparse.ArgumentParser(description="MHI-based gait disease classification pipeline.")
-    parser.add_argument("--stage", choices=["preprocess", "train", "evaluate", "all"], default="all")
-    parser.add_argument("--backbone", choices=BACKBONE_CHOICES, default=DEFAULT_CONFIG.backbone)
+    parser = argparse.ArgumentParser(
+        description="MHI-based gait disease classification pipeline."
+    )
+    parser.add_argument(
+        "--stage",
+        choices=["preprocess", "train", "evaluate", "ensemble", "train_all", "all"],
+        default="all",
+    )
+    parser.add_argument(
+        "--backbone", choices=BACKBONE_CHOICES, default=DEFAULT_CONFIG.backbone
+    )
+    parser.add_argument(
+        "--mixed-precision", action="store_true",
+        help="Enable mixed float16 precision (requires GPU with Tensor Cores).",
+    )
     args = parser.parse_args()
 
     cfg = DEFAULT_CONFIG
     cfg.backbone = args.backbone
+    if args.mixed_precision:
+        cfg.use_mixed_precision = True
+
     set_global_seed(cfg.random_seed)
     ensure_dirs(cfg)
 
@@ -95,6 +147,10 @@ def main():
         model = None
     if args.stage in ("evaluate", "all"):
         run_evaluate(cfg, model=model)
+    if args.stage == "train_all":
+        run_train_all(cfg)
+    if args.stage in ("ensemble",):
+        run_ensemble(cfg)
 
 
 if __name__ == "__main__":

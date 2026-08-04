@@ -149,7 +149,7 @@ def _run_stacking(
     test_X = scaler.transform(test_X)
 
     meta = LogisticRegression(
-        C=1.0, max_iter=1000, multi_class="multinomial", random_state=42
+        C=1.0, max_iter=1000, random_state=42
     )
     meta.fit(val_X, val_y)
 
@@ -357,11 +357,11 @@ def main():
     # Recommendation
     best = summary_df.iloc[0]
     logger.info(
-        f"\n★ RECOMMENDATION: {best['name']} via {best['strategy']}\n"
+        f"\n[RECOMMENDATION] {best['name']} via {best['strategy']}\n"
         f"  Accuracy={best['accuracy']*100:.2f}%  "
-        f"F1-weighted={best['f1_weighted']*100:.2f}%  "
-        f"ROC-AUC={best['roc_auc_macro']:.3f}  "
-        f"Kappa={best['cohen_kappa']:.4f}"
+        f"  F1-weighted={best['f1_weighted']*100:.2f}%  "
+        f"  ROC-AUC={best['roc_auc_macro']:.3f}  "
+        f"  Kappa={best['cohen_kappa']:.4f}"
     )
 
 

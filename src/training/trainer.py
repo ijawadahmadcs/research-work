@@ -69,6 +69,7 @@ class TrainingResult:
 # Learning-rate schedule helpers
 # ─────────────────────────────────────────────────────────────────────────────
 
+@tf.keras.utils.register_keras_serializable(package="src.training.trainer")
 class WarmupCosineDecaySchedule(tf.keras.optimizers.schedules.LearningRateSchedule):
     """
     Linear warmup from `warmup_lr` to `peak_lr` over `warmup_steps` steps,

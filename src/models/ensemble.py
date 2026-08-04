@@ -148,6 +148,10 @@ def load_all_predictions(
             predictions_dir, f"{backbone}_test_predictions.csv"
         )
         if not os.path.exists(csv_path):
+            csv_path = os.path.join(
+                predictions_dir, f"{backbone}_val_predictions.csv"
+            )
+        if not os.path.exists(csv_path):
             continue
         df = pd.read_csv(csv_path)
 

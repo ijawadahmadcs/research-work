@@ -85,8 +85,7 @@ class StackingClassifier:
         self.scaler = StandardScaler()
         if meta_type == "logreg":
             self.meta = LogisticRegression(
-                C=C, max_iter=2000, multi_class="multinomial",
-                random_state=42, solver="lbfgs",
+                C=C, max_iter=2000, random_state=42, solver="lbfgs"
             )
         elif meta_type == "svm":
             self.meta = SVC(

@@ -22,6 +22,7 @@ from src.evaluation.confusion_matrix import compute_confusion_matrix, plot_confu
 from src.evaluation.metrics import compute_metrics, metrics_to_percent_string
 from src.evaluation.roc_curve import plot_multiclass_roc
 from src.preprocessing.video_loader import build_dataset
+from src.training.trainer import WarmupCosineDecaySchedule
 from src.utils.config import BACKBONE_CHOICES, DEFAULT_CONFIG, MODELS_DIR, OUTPUTS_DIR
 from src.utils.logger import get_logger
 
@@ -71,20 +72,18 @@ def main():
     )
     logger.info(f"Loading model from {model_path}")
 
-    # Load model — try direct load first, then fallback to weight-only load
+    custom_objects = {
+        "preprocess_input": lambda x: x,
+        "WarmupCosineDecaySchedule": WarmupCosineDecaySchedule,
+    }
     try:
-        model = tf.keras.models.load_model(model_path)
+        model = tf.keras.models.load_model(
+            model_path, compile=False, safe_mode=False, custom_objects=custom_objects
+        )
         logger.info("Model loaded via tf.keras.models.load_model().")
     except Exception as e:
-        logger.warning(f"Direct load failed ({e}); falling back to architecture rebuild + weight load.")
-        from src.models.model_factory import build_model
-        import zipfile, tempfile
-        model, _ = build_model(cfg)
-        with zipfile.ZipFile(model_path, "r") as zf:
-            with tempfile.TemporaryDirectory() as tmp:
-                zf.extract("model.weights.h5", tmp)
-                model.load_weights(os.path.join(tmp, "model.weights.h5"))
-        logger.info("Weights loaded via fallback path.")
+        logger.error(f"Failed to load model from {model_path}: {e}")
+        raise e
 
     test_ds, n_test = build_dataset("test", cfg, shuffle=False)
     logger.info(f"Evaluating on {n_test} held-out test samples.")

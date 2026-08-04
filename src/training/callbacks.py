@@ -2,17 +2,6 @@
 callbacks.py
 ============
 Training callbacks for both stages of the MHI classifier.
-
-Changes vs. original
----------------------
-- Checkpoint monitors `val_accuracy` in addition to `val_loss` (both are
-  saved; the accuracy checkpoint is preferred at test time because a lower
-  loss does not always correspond to higher accuracy under label smoothing).
-- `EarlyStopping` patience increased to 15 to give the cosine LR schedule
-  room to complete its decay cycle before stopping.
-- Added `TerminateOnNaN` callback to catch NaN losses early.
-- Added `TensorBoard` callback for training visualisation.
-- CSVLogger appends=False so logs are clean for each run.
 """
 
 import os
@@ -39,10 +28,8 @@ def build_callbacks(cfg: Config, stage_name: str) -> List[tf.keras.callbacks.Cal
     """
     ckpt_dir = os.path.join(CHECKPOINTS_DIR)
     log_dir = os.path.join(OUTPUTS_DIR, "logs")
-    tb_dir = os.path.join(OUTPUTS_DIR, "tensorboard", cfg.backbone, stage_name)
     os.makedirs(ckpt_dir, exist_ok=True)
     os.makedirs(log_dir, exist_ok=True)
-    os.makedirs(tb_dir, exist_ok=True)
 
     # Best-accuracy checkpoint (primary — accuracy is the publication metric)
     ckpt_acc = os.path.join(
@@ -79,22 +66,8 @@ def build_callbacks(cfg: Config, stage_name: str) -> List[tf.keras.callbacks.Cal
             restore_best_weights=True,
             verbose=1,
         ),
-        # ── ReduceLROnPlateau: safety net for stage 2 flat regions ─────────
-        tf.keras.callbacks.ReduceLROnPlateau(
-            monitor="val_loss",
-            factor=cfg.lr_reduce_factor,
-            patience=cfg.lr_reduce_patience,
-            min_lr=cfg.min_lr,
-            verbose=1,
-        ),
         # ── CSV history log ────────────────────────────────────────────────
         tf.keras.callbacks.CSVLogger(csv_log, append=False),
-        # ── TensorBoard ────────────────────────────────────────────────────
-        tf.keras.callbacks.TensorBoard(
-            log_dir=tb_dir,
-            histogram_freq=0,
-            write_graph=False,
-        ),
         # ── Guard against NaN losses crashing training silently ───────────
         tf.keras.callbacks.TerminateOnNaN(),
     ]
